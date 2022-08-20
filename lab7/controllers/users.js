@@ -2,7 +2,7 @@ import prisma from '../utils/prisma.js';
 import bcrypt from 'bcrypt';
 import z from 'zod';
 
-export const getUsers = async (req, res) => {
+export const getManyUsers = async (req, res) => {
 	const data = await prisma.user.findMany({
 		select: {
 			id: true,
@@ -23,7 +23,6 @@ export const getUsers = async (req, res) => {
 export const createUser = async (req, res) => {
 	// prisma.$executeRaw
 	try {
-		console.log('req.body', req.body);
 		const input = z
 			.object({
 				name: z.string(),
@@ -56,6 +55,8 @@ export const createUser = async (req, res) => {
 		// };
 
 		// console.table(data);
+
+		delete data.password;
 
 		res.status(201).json(data);
 	} catch (error) {
@@ -101,6 +102,8 @@ export const updateUser = async (req, res) => {
 		});
 
 		// console.table(data);
+
+		delete data.password;
 
 		return res.status(200).json(data);
 	} catch (error) {
@@ -155,6 +158,8 @@ const restoreUser = async (req, res) => {
 			},
 		});
 
+		delete data.password;
+
 		return res.status(200).json(data);
 	} catch (error) {
 		res.status(400).json(`Error, ${error.message}`);
@@ -162,7 +167,7 @@ const restoreUser = async (req, res) => {
 };
 
 const UsersController = {
-	getMany: getUsers,
+	getMany: getManyUsers,
 	create: createUser,
 	update: updateUser,
 	restore: restoreUser,
