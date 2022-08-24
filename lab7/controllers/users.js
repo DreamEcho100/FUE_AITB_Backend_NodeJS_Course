@@ -1,6 +1,18 @@
 import prisma from '../utils/prisma.js';
 import bcrypt from 'bcrypt';
 import z from 'zod';
+import jwt from 'jsonwebtoken';
+
+const compareTwoPasswords = async (comparedTo, comparedWithEncrypted) => {
+	// const isPasswordsMatched = await bcrypt.compare(
+	// 	comparedTo,
+	// 	comparedWithEncrypted
+	// );
+	if (!(await bcrypt.compare(comparedTo, comparedWithEncrypted)))
+		throw new Error('Password is incorrect');
+
+	return true;
+};
 
 export const getManyUsers = async (req, res) => {
 	const data = await prisma.user.findMany({
@@ -44,19 +56,13 @@ export const createUser = async (req, res) => {
 				city: input.city,
 				phone: input.phone,
 			},
+			select: {
+				name: true,
+				email: true,
+				city: true,
+				phone: true,
+			},
 		});
-
-		// const data = {
-		// 	name: req.body.name,
-		// 	email: req.body.email,
-		// 	password: hashedPassword,
-		// 	city: req.body.city,
-		// 	phone: req.body.phone,
-		// };
-
-		// console.table(data);
-
-		delete data.password;
 
 		res.status(201).json(data);
 	} catch (error) {
@@ -83,11 +89,7 @@ export const updateUser = async (req, res) => {
 			select: { password: true },
 		});
 
-		const isPasswordsMatched = await bcrypt.compare(
-			input.password,
-			targetedUser.password
-		);
-		if (!isPasswordsMatched) throw new Error('Password is incorrect');
+		await compareTwoPasswords(input.password, targetedUser.password);
 
 		const data = await prisma.user.update({
 			data: {
@@ -99,11 +101,14 @@ export const updateUser = async (req, res) => {
 			where: {
 				id: parseInt(req.params.id),
 			},
+			select: {
+				name: true,
+				email: true,
+				password: true,
+				city: true,
+				phone: true,
+			},
 		});
-
-		// console.table(data);
-
-		delete data.password;
 
 		return res.status(200).json(data);
 	} catch (error) {
@@ -126,11 +131,7 @@ export const deleteUser = async (req, res) => {
 			select: { password: true },
 		});
 
-		const isPasswordsMatched = await bcrypt.compare(
-			input.password,
-			targetedUser.password
-		);
-		if (!isPasswordsMatched) throw new Error('Password is incorrect');
+		await compareTwoPasswords(input.password, targetedUser.password);
 
 		const data = await prisma.user.update({
 			data: {
@@ -138,6 +139,12 @@ export const deleteUser = async (req, res) => {
 			},
 			where: {
 				id: parseInt(req.params.id),
+			},
+			select: {
+				name: true,
+				email: true,
+				city: true,
+				phone: true,
 			},
 		});
 
@@ -149,21 +156,75 @@ export const deleteUser = async (req, res) => {
 
 const restoreUser = async (req, res) => {
 	try {
+		const input = z.object({
+			// password: z.string(),
+			email: z.string(),
+		});
+
+		const targetedUser = await prisma.user.findFirstOrThrow({
+			select: { id: true },
+			where: {
+				isDeleted: true,
+				AND: {
+					email: input.email,
+				},
+			},
+		});
+
 		const data = await prisma.user.update({
 			data: {
 				isDeleted: false,
 			},
 			where: {
-				id: parseInt(req.params.id),
+				id: targetedUser.id,
 			},
 		});
-
-		delete data.password;
 
 		return res.status(200).json(data);
 	} catch (error) {
 		res.status(400).json(`Error, ${error.message}`);
 	}
+};
+
+export const loginUser = async (req, res) => {
+	const input = z
+		.object({
+			password: z.string(),
+			email: z.string().email(),
+		})
+		.parse(req.body);
+
+	const targetedUser = await prisma.user.findFirstOrThrow({
+		select: { id: true, password: true },
+		where: {
+			isDeleted: false,
+			AND: {
+				email: input.email,
+			},
+		},
+	});
+
+	await compareTwoPasswords(input.password, targetedUser.password);
+
+	const SECRET = process.env.SECRET;
+
+	if (!SECRET) throw new Error('');
+
+	const ONE_MONTH_IN_SECONDS = 60 * 60 * 24 * 30;
+
+	const payload = {
+		id: targetedUser.id,
+		expiresIn: new Date(Date.now() + ONE_MONTH_IN_SECONDS * 1000).getTime(),
+	};
+
+	const token = jwt.sign(payload, process.env.SECRET, {
+		expiresIn: ONE_MONTH_IN_SECONDS,
+	});
+
+	return res.status(200).json({
+		payload,
+		token,
+	});
 };
 
 const UsersController = {
@@ -172,6 +233,7 @@ const UsersController = {
 	update: updateUser,
 	restore: restoreUser,
 	delete: deleteUser,
+	login: loginUser,
 };
 
 export default UsersController;

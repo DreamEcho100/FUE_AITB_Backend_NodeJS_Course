@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import usersController from '../controllers/users.js';
+import jwt from 'jsonwebtoken';
 
 const usersRouter = Router();
 
@@ -9,8 +10,10 @@ usersRouter.post('/', usersController.create);
 
 usersRouter.put('/:id', usersController.update);
 
-usersRouter.patch('/:id', usersController.restore);
+usersRouter.patch('/', usersController.restore);
 
 usersRouter.delete('/:id', usersController.delete);
+
+usersRouter.post('/login', usersController.login);
 
 export default usersRouter;
